@@ -1,4 +1,5 @@
 import { model, Schema } from 'mongoose';
+import { linkRegexp } from '../validation/request-validation';
 
 interface ICard {
     name: string,
@@ -19,6 +20,10 @@ const cardSchema = new Schema<ICard>({
   link: {
     type: String,
     required: true,
+    validate: {
+      validator: (e: string) => linkRegexp.test(e),
+      message: 'Неправильный формат ссылки',
+    },
   },
 
   owner: {

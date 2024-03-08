@@ -1,46 +1,79 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import User from '../models/user';
-import { NOT_FOUND_ERROR, SERVER_ERROR } from '../constans/errors';
 import { RequestWithUser } from '../types/types';
+import NotFoundError from '../errors/not-found-err';
+import EmailError from '../errors/email-err';
 
-export const getUsers = (req: Request, res: Response) => User.find({})
+export const getUsers = (req: Request, res: Response, next: NextFunction) => User.find({})
   .then((users) => res.send({ data: users }))
-  .catch(() => res.status(NOT_FOUND_ERROR).send({ message: 'На сервере произошла ошибка' }));
+  .catch(next);
 
-export const getUserById = (req: Request, res: Response) => User.findOne({ _id: req.params.userId })
+export const getUserById = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => User.findOne({ _id: req.params.userId })
   .then((user) => {
     if (!user) {
-      return Promise.reject(new Error('Пользователь не найден'));
+      throw new NotFoundError('Пользователь не найден');
     }
     return res.send({ data: user });
   })
-  .catch(() => res.status(NOT_FOUND_ERROR).send({ message: 'Пользователь не найден' }));
+  .catch(next);
 
-export const createUser = (req: RequestWithUser, res: Response) => {
-  const { name, about, avatar } = req.body;
-  return User.create({ name, about, avatar })
+export const createUser = (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const {
+    name, about, avatar, email, password,
+  } = req.body;
+  return bcrypt.hash(password, 10)
+    .then((hash) => User.create({
+      name, about, avatar, email, password: hash,
+    }))
     .then((user) => res.send({ data: user }))
-    .catch(() => res.status(SERVER_ERROR).send({ message: 'На сервере произошла ошибка' }));
+    .catch((err) => {
+      if (err.code === 11000) {
+        throw new EmailError('Пользователь с таким Email уже существует');
+      }
+      next(err);
+    });
 };
 
-export const updateUser = (req: RequestWithUser, res: Response) => {
+export const updateUser = (req: RequestWithUser, res: Response, next: NextFunction) => {
   const { name, about } = req.body;
-  if (req.user) {
-    const userId = req.user._id;
-    return User.findByIdAndUpdate(userId, { name, about }, { new: true })
-      .then((user) => res.send({ data: user }))
-      .catch(() => res.status(NOT_FOUND_ERROR).send({ message: 'Пользователь не найден' }));
-  }
-  return Promise.reject(new Error('На сервере произошла ошибка'));
+  const userId = req.user._id;
+  return User.findByIdAndUpdate(userId, { name, about }, { new: true })
+    .then((user) => res.send({ data: user }))
+    .catch(next);
 };
 
-export const updateAvatar = (req: RequestWithUser, res: Response) => {
+export const updateAvatar = (req: RequestWithUser, res: Response, next: NextFunction) => {
   const { avatar } = req.body;
-  if (req.user) {
-    const userId = req.user._id;
-    return User.findByIdAndUpdate(userId, { avatar }, { new: true })
-      .then((user) => res.send({ data: user }))
-      .catch(() => res.status(NOT_FOUND_ERROR).send({ message: 'Пользователь не найден' }));
-  }
-  return Promise.reject(new Error('На сервере произошла ошибка'));
+  const userId = req.user._id;
+  return User.findByIdAndUpdate(userId, { avatar }, { new: true })
+    .then((user) => res.send({ data: user }))
+    .catch(next);
+};
+
+export const login = (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const { email, password } = req.body;
+  return User.findUserByCredentials(email, password)
+    .then((user) => {
+      const token = jwt.sign(
+        { _id: user._id },
+        'some-secret-key',
+        { expiresIn: '7d' },
+      );
+      res.send({ token });
+    })
+    .catch(next);
+};
+
+export const getCurrentUser = (req: RequestWithUser, res: Response, next: NextFunction) => {
+  const userId = req.user._id;
+
+  return User.findOne({ _id: userId })
+    .then((user) => res.send({ data: user }))
+    .catch((next));
 };
