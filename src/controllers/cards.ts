@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { RequestWithUser } from '../types/types';
 import Card from '../models/card';
 import NotFoundError from '../errors/not-found-err';
-import DeleteError from '../errors/server-err';
+import DeleteError from '../errors/delete-err';
 
 export const getCards = (req: Request, res: Response, next: NextFunction) => Card.find({})
   .then((cards) => res.send({ data: cards }))
@@ -12,7 +12,7 @@ export const postCard = (req: RequestWithUser, res: Response, next: NextFunction
   const { name, link } = req.body;
   const owner = req.user._id;
   return Card.create({ name, link, owner })
-    .then((card) => res.send({ data: card }))
+    .then((card) => res.status(201).send({ data: card }))
     .catch(next);
 };
 

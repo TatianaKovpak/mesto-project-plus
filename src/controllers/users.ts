@@ -31,10 +31,18 @@ export const createUser = (req: RequestWithUser, res: Response, next: NextFuncti
     .then((hash) => User.create({
       name, about, avatar, email, password: hash,
     }))
-    .then((user) => res.send({ data: user }))
+    .then((user) => {
+      const userWithoutPassword = {
+        name: user.name,
+        about: user.about,
+        avatar: user.avatar,
+        email: user.email,
+      };
+      res.status(201).send({ data: userWithoutPassword });
+    })
     .catch((err) => {
       if (err.code === 11000) {
-        throw new EmailError('Пользователь с таким Email уже существует');
+        next(new EmailError('Пользователь с таким Email уже существует'));
       }
       next(err);
     });
@@ -72,7 +80,9 @@ export const login = (req: RequestWithUser, res: Response, next: NextFunction) =
 
 export const getCurrentUser = (req: RequestWithUser, res: Response, next: NextFunction) => {
   const userId = req.user._id;
-
+  if (!userId) {
+    throw new NotFoundError('Пользователь не найден');
+  }
   return User.findOne({ _id: userId })
     .then((user) => res.send({ data: user }))
     .catch((next));
